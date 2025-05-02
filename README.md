@@ -1,7 +1,8 @@
 # Ansible роль: k8s_cluster
 
 ## Описание
-Основной репозиторий [kube_project]<https://github.com/Alvald1/kube_project>
+Основной репозиторий [kube_project](https://github.com/Alvald1/kube_project)
+
 Роль `k8s_cluster` предназначена для автоматизированного развертывания Kubernetes-кластера на базе Debian 12 (bookworm) с поддержкой различных контейнерных движков (CRI-O, containerd, Docker+cri-dockerd), а также с возможностью настройки High Availability (HA) control-plane с помощью keepalived и haproxy. Роль поддерживает деплой как HA-кластера, так и одновузлового кластера, а также установку ingress-контроллера и тестового nginx-приложения.
 
 ## Возможности
