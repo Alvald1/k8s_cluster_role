@@ -1,0 +1,46 @@
+- name: Install software-properties-common
+  apt:
+    name: software-properties-common
+    state: present
+    update_cache: yes
+
+- name: Ensure /etc/apt/keyrings directory exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download CRI-O GPG key
+  get_url:
+    url: "{{ cri_o_gpg_key }}"
+    dest: /usr/share/keyrings/cri-o-keyring.gpg_armored
+
+- name: De-Armor CRI-O GPG key
+  shell: gpg --dearmor < /usr/share/keyrings/cri-o-keyring.gpg_armored > /etc/apt/keyrings/cri-o-apt-keyring.gpg
+  args:
+    creates: /etc/apt/keyrings/cri-o-apt-keyring.gpg
+
+- name: Add CRI-O repository
+  ansible.builtin.apt_repository:
+    repo: "{{ cri_o_apt_repo }}"
+    state: present
+    filename: cri-o
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Install cri-o
+  apt:
+    name: cri-o
+    state: present
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: Enable and start crio service
+  ansible.builtin.systemd:
+    name: crio
+    enabled: yes
+    state: started

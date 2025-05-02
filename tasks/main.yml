@@ -1,0 +1,38 @@
+- name: Run network tasks
+  import_tasks: network_tasks.yml
+
+- name: Add Debian 12 (bookworm) repositories
+  import_tasks: add_repositories.yml
+
+- name: Install dependencies
+  import_tasks: install_dependencies.yml
+
+- name: Configure Kubernetes prerequisites
+  import_tasks: k8s_prereqs.yml
+
+- name: Install CRI-O if branch_mode == 0
+  import_tasks: cri-o.yml
+  when: branch_mode == 0
+
+- name: Install containerd if branch_mode == 1
+  import_tasks: containerd.yml
+  when: branch_mode == 1
+
+- name: Install Docker+cri-dockerd if branch_mode == 2
+  import_tasks: cri-dockerd.yml
+  when: branch_mode == 2
+
+- name: Deploy all-in-one cluster if branch_mode == 0 or 1 and node1
+  import_tasks: all_in_one.yml
+  when:
+    - (branch_mode == 0 or branch_mode == 1)
+    - inventory_hostname == 'node1'
+
+- name: Deploy HA ingress controller if branch_mode == 2
+  import_tasks: ingress_controller.yml
+  when: branch_mode == 2
+
+- name: Deploy HA cluster if branch_mode == 2
+  import_tasks: cluster.yml
+  when: branch_mode == 2
+

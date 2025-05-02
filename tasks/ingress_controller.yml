@@ -1,0 +1,57 @@
+- name: Ensure required apt packages are installed
+  ansible.builtin.apt:
+    name: "{{ helm_packages }}"
+    state: present
+
+- name: Ensure venv exists
+  ansible.builtin.command: python3 -m venv /opt/ansible-venv
+  args:
+    creates: /opt/ansible-venv/bin/activate
+
+- name: Ensure python 'kubernetes' library is installed in venv
+  ansible.builtin.pip:
+    name: kubernetes
+    state: present
+    virtualenv: /opt/ansible-venv
+    virtualenv_python: python3
+
+- name: Set ansible_python_interpreter to venv python
+  set_fact:
+    ansible_python_interpreter: /opt/ansible-venv/bin/python3
+
+- name: Add Helm apt key
+  ansible.builtin.shell: |
+    curl {{ helm_apt_key }} | gpg --dearmor | tee /usr/share/keyrings/helm.gpg > /dev/null
+  args:
+    creates: /usr/share/keyrings/helm.gpg
+  changed_when: false
+
+- name: Add Helm apt repository
+  ansible.builtin.apt_repository:
+    repo: "{{ helm_apt_repo }}"
+    filename: helm-stable-debian
+    state: present
+
+- name: Update apt cache after adding Helm repo
+  ansible.builtin.apt:
+    update_cache: yes
+
+- name: Ensure helm is installed
+  ansible.builtin.apt:
+    name: helm
+    state: present
+
+- name: Add ingress-nginx Helm repository
+  kubernetes.core.helm_repository:
+    name: ingress-nginx
+    repo_url: "{{ ingress_nginx_repo }}"
+  delegate_to: node1
+  run_once: true
+
+- name: Update Helm repositories
+  ansible.builtin.command: helm repo update
+  changed_when: "'Update Complete.' in repo_update.stdout"
+  register: repo_update
+  delegate_to: node1
+  run_once: true
+

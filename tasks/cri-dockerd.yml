@@ -1,0 +1,70 @@
+- name: Ensure /etc/apt/keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Add Docker GPG key
+  ansible.builtin.get_url:
+    url: "{{ docker_gpg_key }}"
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
+
+- name: Add Docker repository
+  ansible.builtin.apt_repository:
+    repo: "{{ docker_apt_repo }}"
+    filename: docker
+    state: present
+    update_cache: yes
+
+- name: Install Docker and related packages
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: present
+    update_cache: yes
+
+- name: Download cri_dockerd deb package
+  ansible.builtin.get_url:
+    url: "{{ cri_docker_package }}"
+    dest: /tmp/cri-dockerd_{{ cri_docker_version }}.3-0.debian-bookworm_amd64.deb
+
+- name: Install cri-dockerd deb package
+  ansible.builtin.apt:
+    deb: /tmp/cri-dockerd_{{ cri_docker_version }}.3-0.debian-bookworm_amd64.deb
+
+- name: Remove cri-dockerd deb package
+  ansible.builtin.file:
+    path: /tmp/cri-dockerd_{{ cri_docker_version }}.3-0.debian-bookworm_amd64.deb
+    state: absent
+
+- name: Ensure cri-docker.service.d directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/cri-docker.service.d
+    state: directory
+    mode: '0755'
+
+- name: Configure pause image for cri-dockerd
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/cri-docker.service.d/10-pause.conf
+    content: |
+      # File: /etc/systemd/system/cri-docker.service.d/10-pause.conf
+      [Service]
+      ExecStart=
+      ExecStart=/usr/bin/cri-dockerd --container-runtime-endpoint fd:// --pod-infra-container-image "registry.k8s.io/pause:3.10"
+    mode: '0644'
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: Restart cri-docker service
+  ansible.builtin.systemd:
+    name: cri-docker.service
+    state: restarted
+
+- name: Configure crictl to use cri-dockerd
+  ansible.builtin.copy:
+    dest: /etc/crictl.yaml
+    content: |
+      runtime-endpoint: unix:///var/run/cri-dockerd.sock
+    mode: '0644'

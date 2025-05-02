@@ -1,0 +1,65 @@
+debian_main_repo: "deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware"
+debian_updates_repo: "deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware"
+debian_security_repo: "deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware"
+
+base_packages:
+  - curl
+  - wget
+  - gnupg
+  - sudo
+  - iptables
+
+control_panel_packages:
+  - keepalived
+  - haproxy
+
+helm_packages:
+  - python3-pip
+  - python3-venv
+  - apt-transport-https
+
+kube_packages:
+  - kubeadm
+  - kubectl
+  - kubelet
+
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+cri_docker_package: "https://github.com/Mirantis/cri-dockerd/releases/download/v{{ cri_docker_version }}/cri-dockerd_{{ cri_docker_version }}.3-0.debian-bookworm_amd64.deb"
+
+kernel_modules:
+  - overlay
+  - br_netfilter
+
+sysctl_params:
+  - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+  - { key: "net.bridge.bridge-nf-call-iptables", value: "1" }
+  - { key: "net.ipv4.ip_forward", value: "1" }
+
+k8s_apt_key: "https://pkgs.k8s.io/core:/stable:/{{ k8s_version }}/deb/Release.key"
+k8s_apt_repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ k8s_version }}/deb/ /"
+
+cri_o_gpg_key: "https://download.opensuse.org/repositories/isv:/cri-o:/stable:/{{ crio_version }}/deb/Release.key"
+cri_o_apt_repo: "deb [signed-by=/etc/apt/keyrings/cri-o-apt-keyring.gpg] https://download.opensuse.org/repositories/isv:/cri-o:/stable:/{{ crio_version }}/deb/ /"
+
+containerd_archive: "https://github.com/containerd/containerd/releases/download/v{{ containerd_version }}/containerd-{{ containerd_version }}-linux-amd64.tar.gz"
+containerd_service: "https://raw.githubusercontent.com/containerd/containerd/main/containerd.service"
+runc_binary: "https://github.com/opencontainers/runc/releases/download/{{ runc_version }}/runc.amd64"
+
+CNI_plugins: "https://github.com/containernetworking/plugins/releases/download/{{ CNI_version }}/cni-plugins-linux-amd64-{{ CNI_version }}.tgz"
+
+docker_gpg_key: "https://download.docker.com/linux/debian/gpg"
+docker_apt_repo: "deb [arch={{ ansible_architecture | default('amd64') }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_lsb.codename | default('bookworm') }} stable"
+
+kube_pwd: "/home/{{ ansible_user | default('user') }}/.kube"
+kube_flannel: "https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"
+
+helm_apt_key: "https://baltocdn.com/helm/signing.asc"
+helm_apt_repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main"
+
+ingress_nginx_repo: "https://kubernetes.github.io/ingress-nginx"

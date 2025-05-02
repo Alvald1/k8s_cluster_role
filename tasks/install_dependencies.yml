@@ -1,0 +1,14 @@
+# Установка базовых пакетов на всех хостах
+- name: Install curl, wget, gnupg, sudo, iptables
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: present
+    update_cache: yes
+
+# Установка keepalived и haproxy только на control_panel
+- name: Install keepalived and haproxy (only on control_panel)
+  ansible.builtin.apt:
+    name: "{{ control_panel_packages }}"
+    state: present
+    update_cache: yes
+  when: "'control_panel' in group_names"

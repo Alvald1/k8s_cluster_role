@@ -1,0 +1,13 @@
+# Сетевые задачи для настройки интерфейса, hostname, resolv.conf и hosts
+
+- name: Установка hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}.internal"
+
+- name: Добавить строки для всех nodeX.internal в /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    create: yes
+    line: "{{ network_prefix ~ (ip_base + (item | int)) ~ ' node' ~ item ~ '.internal' }}"
+    insertafter: EOF
+  loop: "{{ query('inventory_hostnames', 'all') | select('match', '^node[0-9]+$') | map('regex_replace', '^node', '') | list }}"

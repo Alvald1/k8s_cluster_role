@@ -1,0 +1,20 @@
+network_prefix: "192.168.62."
+ip_base: 132
+ip_base_virtual: 200
+
+k8s_version: "v1.32"
+crio_version: "v1.32"
+containerd_version: "2.0.4"
+runc_version: "v1.2.6"
+CNI_version: "v1.6.2"
+cri_docker_version: "0.3.16"
+
+pod_network: "10.244.0.0/16"
+api_port: 8888
+control_panel_port: 6443
+
+
+# cri-o -> 0
+# containerd -> 1
+# Docker + cri-dockerd -> 2
+branch_mode: 2
