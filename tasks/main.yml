@@ -22,11 +22,11 @@
   import_tasks: cri-dockerd.yml
   when: branch_mode == 2
 
-- name: Deploy all-in-one cluster if branch_mode == 0 or 1 and node1
+- name: Deploy all-in-one cluster if branch_mode == 0 or 1 and active_control_panel
   import_tasks: all_in_one.yml
   when:
     - (branch_mode == 0 or branch_mode == 1)
-    - inventory_hostname == 'node1'
+    - inventory_hostname == active_control_panel
 
 - name: Deploy HA ingress controller if branch_mode == 2
   import_tasks: ingress_controller.yml

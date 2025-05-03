@@ -3,7 +3,8 @@
   ansible.builtin.command: kubeadm init --pod-network-cidr={{ pod_network }}
   args:
     creates: /etc/kubernetes/admin.conf
-  when: inventory_hostname == 'node1'
+  delegate_to: "{{ active_control_panel }}"
+  run_once: true
 
 - name: Ensure .kube directory exists
   become: yes
@@ -13,7 +14,8 @@
     owner: "{{ ansible_user | default('user') }}"
     group: "{{ ansible_user | default('user') }}"
     mode: '0700'
-  when: inventory_hostname == 'node1'
+  delegate_to: "{{ active_control_panel }}"
+  run_once: true
 
 - name: Copy kubeconfig to user home
   become: yes
@@ -24,20 +26,23 @@
     group: "{{ ansible_user | default('user') }}"
     mode: '0600'
     remote_src: yes
-  when: inventory_hostname == 'node1'
+  delegate_to: "{{ active_control_panel }}"
+  run_once: true
 
 - name: Apply Flannel CNI plugin (only on node1)
   become: yes
   ansible.builtin.command: kubectl apply -f {{ kube_flannel }}
   environment:
     KUBECONFIG: "{{ kube_pwd }}/config"
-  when: inventory_hostname == 'node1'
+  delegate_to: "{{ active_control_panel }}"
+  run_once: true
 
 - name: Remove control-plane taint to allow workloads on master
   become: yes
   ansible.builtin.command: kubectl taint nodes --all node-role.kubernetes.io/control-plane-
   environment:
     KUBECONFIG: "{{ kube_pwd }}/config"
-  when: inventory_hostname == 'node1'
+  delegate_to: "{{ active_control_panel }}"
+  run_once: true
   ignore_errors: yes
 

@@ -59,9 +59,9 @@
   when: "'control_panel' in group_names"
 
 # ---------------------------
-# 2. Инициализация control-plane на node1
+# 2. Инициализация control-plane на active_control_panel
 # ---------------------------
-- name: Initialize Kubernetes control plane on node1 and save output
+- name: Initialize Kubernetes control plane on active_control_panel and save output
   ansible.builtin.command: |
     kubeadm init \
       --cri-socket unix:///var/run/cri-dockerd.sock \
@@ -70,50 +70,51 @@
       --upload-certs
   args:
     creates: /etc/kubernetes/admin.conf  
-  when: inventory_hostname == 'node1'
+  delegate_to: "{{ active_control_panel }}"
+  run_once: true
 
 # ---------------------------
 # 3. Генерация и распространение join-команд
 # ---------------------------
-- name: Upload certs and get certificate key (on node1)
+- name: Upload certs and get certificate key (on active_control_panel)
   ansible.builtin.command: kubeadm init phase upload-certs --upload-certs
   register: upload_certs_result
-  when: inventory_hostname == 'node1'
+  delegate_to: "{{ active_control_panel }}"
   run_once: true
 
-- name: Extract certificate key from upload-certs output (on node1)
+- name: Extract certificate key from upload-certs output (on active_control_panel)
   ansible.builtin.set_fact:
     kubeadm_certificate_key: "{{ upload_certs_result.stdout | regex_findall('([a-f0-9]{64})') | first }}"
-  when: inventory_hostname == 'node1'
+  delegate_to: "{{ active_control_panel }}"
   run_once: true
 
-- name: Generate kubeadm join command for control-plane (on node1)
+- name: Generate kubeadm join command for control-plane (on active_control_panel)
   ansible.builtin.command: kubeadm token create --print-join-command
   register: kubeadm_join_cmd_result
-  when: inventory_hostname == 'node1'
+  delegate_to: "{{ active_control_panel }}"
   run_once: true
 
-- name: Compose full workers join command (on node1)
+- name: Compose full workers join command (on active_control_panel)
   ansible.builtin.set_fact:
     kubeadm_join_command_workers: '{{ kubeadm_join_cmd_result.stdout }}'
-  when: inventory_hostname == 'node1'
+  delegate_to: "{{ active_control_panel }}"
   run_once: true
 
-- name: Compose full control-plane join command (on node1)
+- name: Compose full control-plane join command (on active_control_panel)
   ansible.builtin.set_fact:
     kubeadm_join_command_control: "{{ kubeadm_join_command_workers }} --control-plane --certificate-key {{ kubeadm_certificate_key }}"
-  when: inventory_hostname == 'node1'
+  delegate_to: "{{ active_control_panel }}"
   run_once: true
 
 - name: Set join command fact on all hosts
   ansible.builtin.set_fact:
-    kubeadm_join_command_control: "{{ hostvars['node1']['kubeadm_join_command_control'] }}"
-  when: inventory_hostname != 'node1'
+    kubeadm_join_command_control: "{{ hostvars[active_control_panel]['kubeadm_join_command_control'] }}"
+  when: inventory_hostname != active_control_panel
 
 - name: Set join command fact on all hosts
   ansible.builtin.set_fact:
-    kubeadm_join_command_workers: "{{ hostvars['node1']['kubeadm_join_command_workers'] }}"
-  when: inventory_hostname != 'node1'
+    kubeadm_join_command_workers: "{{ hostvars[active_control_panel]['kubeadm_join_command_workers'] }}"
+  when: inventory_hostname != active_control_panel
 
 # ---------------------------
 # 4. Присоединение control-plane и worker-нод
@@ -124,12 +125,12 @@
     creates: /etc/kubernetes/admin.conf
   when:
     - "'control_panel' in group_names"
-    - inventory_hostname != 'node1'
+    - inventory_hostname != active_control_panel
 
 - name: Check if worker node already joined the cluster
   ansible.builtin.command: kubectl get node {{ inventory_hostname }}.internal -o name
   register: kube_worker_exists
-  delegate_to: node1
+  delegate_to: "{{ active_control_panel }}"
   ignore_errors: yes
   changed_when: false
   failed_when: false
@@ -171,12 +172,13 @@
     remote_src: yes
   when: "'control_panel' in group_names"
 
-- name: Apply Flannel CNI plugin (only on node1)
+- name: Apply Flannel CNI plugin (only on active_control_panel)
   become: yes
   ansible.builtin.command: kubectl apply -f {{ kube_flannel }}
   environment:
     KUBECONFIG: "{{ kube_pwd }}/config"
-  when: inventory_hostname == 'node1'
+  delegate_to: "{{ active_control_panel }}"
+  run_once: true
 
 # ---------------------------
 # 6. Установка ingress-nginx (namespace и Helm)
@@ -187,7 +189,7 @@
     kind: Namespace
     name: ingress-nginx
     state: present
-  delegate_to: node1
+  delegate_to: "{{ active_control_panel }}"
   environment:
     KUBECONFIG: "{{ kube_pwd }}/config"
   run_once: true
@@ -199,7 +201,7 @@
     release_namespace: ingress-nginx
     create_namespace: false
     state: present
-  delegate_to: node1
+  delegate_to: "{{ active_control_panel }}"
   environment:
     KUBECONFIG: "{{ kube_pwd }}/config"
   run_once: true
@@ -213,7 +215,7 @@
   environment:
     KUBECONFIG: "{{ kube_pwd }}/config"
   register: ingress_nodeport_result
-  delegate_to: node1
+  delegate_to: "{{ active_control_panel }}"
   run_once: true
   changed_when: false
 

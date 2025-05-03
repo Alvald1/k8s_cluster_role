@@ -45,13 +45,13 @@
   kubernetes.core.helm_repository:
     name: ingress-nginx
     repo_url: "{{ ingress_nginx_repo }}"
-  delegate_to: node1
+  delegate_to: "{{ active_control_panel }}"
   run_once: true
 
 - name: Update Helm repositories
   ansible.builtin.command: helm repo update
   changed_when: "'Update Complete.' in repo_update.stdout"
   register: repo_update
-  delegate_to: node1
+  delegate_to: "{{ active_control_panel }}"
   run_once: true
 
