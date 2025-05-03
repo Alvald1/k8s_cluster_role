@@ -1,4 +1,66 @@
-# 1. Инициализация control-plane на node1
+# ---------------------------
+# 1. Настройка keepalived и haproxy (до инициализации кластера)
+# ---------------------------
+- name: Create keepalived.conf on control_panel nodes
+  ansible.builtin.template:
+    src: templates/keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: '0644'
+  when: "'control_panel' in group_names"
+
+- name: Create check_apiserver.sh on control_panel nodes
+  ansible.builtin.template:
+    src: templates/check_apiserver.sh.j2
+    dest: /etc/keepalived/check_apiserver.sh
+    owner: root
+    group: root
+    mode: '0755'
+  when: "'control_panel' in group_names"
+
+- name: Ensure check_apiserver.sh is executable
+  ansible.builtin.file:
+    path: /etc/keepalived/check_apiserver.sh
+    mode: '0755'
+  when: "'control_panel' in group_names"
+
+- name: Create haproxy.cfg on control_panel nodes
+  ansible.builtin.template:
+    src: templates/haproxy1.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: '0644'
+  when: "'control_panel' in group_names"
+
+- name: Enable keepalived service
+  ansible.builtin.systemd:
+    name: keepalived
+    enabled: yes
+  when: "'control_panel' in group_names"
+
+- name: Start keepalived service
+  ansible.builtin.systemd:
+    name: keepalived
+    state: started
+  when: "'control_panel' in group_names"
+
+- name: Enable haproxy service
+  ansible.builtin.systemd:
+    name: haproxy
+    enabled: yes
+  when: "'control_panel' in group_names"
+
+- name: Restart haproxy service
+  ansible.builtin.systemd:
+    name: haproxy
+    state: restarted
+  when: "'control_panel' in group_names"
+
+# ---------------------------
+# 2. Инициализация control-plane на node1
+# ---------------------------
 - name: Initialize Kubernetes control plane on node1 and save output
   ansible.builtin.command: |
     kubeadm init \
@@ -10,7 +72,9 @@
     creates: /etc/kubernetes/admin.conf  
   when: inventory_hostname == 'node1'
 
-# 2. Генерация и распространение join-команд
+# ---------------------------
+# 3. Генерация и распространение join-команд
+# ---------------------------
 - name: Upload certs and get certificate key (on node1)
   ansible.builtin.command: kubeadm init phase upload-certs --upload-certs
   register: upload_certs_result
@@ -51,7 +115,9 @@
     kubeadm_join_command_workers: "{{ hostvars['node1']['kubeadm_join_command_workers'] }}"
   when: inventory_hostname != 'node1'
 
-# 3. Присоединение control-plane и worker-нод
+# ---------------------------
+# 4. Присоединение control-plane и worker-нод
+# ---------------------------
 - name: Join control-plane nodes to the Kubernetes cluster
   ansible.builtin.command: "{{ kubeadm_join_command_control }} --cri-socket unix:///var/run/cri-dockerd.sock --ignore-preflight-errors=all"
   args:
@@ -81,7 +147,9 @@
     - kube_worker_exists is defined
     - kube_worker_exists.rc != 0
 
-# 4. Копирование kubeconfig и установка CNI
+# ---------------------------
+# 5. Копирование kubeconfig и установка CNI
+# ---------------------------
 - name: Ensure .kube directory exists
   become: yes
   ansible.builtin.file:
@@ -105,12 +173,14 @@
 
 - name: Apply Flannel CNI plugin (only on node1)
   become: yes
-  ansible.builtin.command: kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+  ansible.builtin.command: kubectl apply -f {{ kube_flannel }}
   environment:
     KUBECONFIG: "{{ kube_pwd }}/config"
   when: inventory_hostname == 'node1'
 
-# 5. Установка ingress-nginx (namespace и Helm)
+# ---------------------------
+# 6. Установка ingress-nginx (namespace и Helm)
+# ---------------------------
 - name: Create ingress-nginx namespace
   kubernetes.core.k8s:
     api_version: v1
@@ -134,75 +204,9 @@
     KUBECONFIG: "{{ kube_pwd }}/config"
   run_once: true
 
-# 6. Настройка keepalived и haproxy (после получения ingress NodePort)
-- name: Create keepalived.conf on control_panel nodes
-  ansible.builtin.copy:
-    dest: /etc/keepalived/keepalived.conf
-    content: |
-      global_defs {
-          enable_script_security
-          script_user nobody
-      }
-
-      vrrp_script check_apiserver {
-        script "/etc/keepalived/check_apiserver.sh"
-        interval 3
-      }
-
-      vrrp_instance VI_1 {
-          state BACKUP
-          interface ens33
-          virtual_router_id 5
-          priority 100
-          advert_int 1
-          nopreempt
-          authentication {
-              auth_type PASS
-              auth_pass ZqSj#f1G
-          }
-          virtual_ipaddress {
-              {{ network_prefix }}{{ ip_base_virtual }}
-          }
-          track_script {
-              check_apiserver
-          }
-      }
-    owner: root
-    group: root
-    mode: '0644'
-  when: "'control_panel' in group_names"
-
-- name: Create check_apiserver.sh on control_panel nodes
-  ansible.builtin.copy:
-    dest: /etc/keepalived/check_apiserver.sh
-    content: |
-      #!/bin/sh
-      # File: /etc/keepalived/check_apiserver.sh
-
-      APISERVER_VIP={{ network_prefix }}{{ ip_base_virtual }}
-      APISERVER_DEST_PORT={{ api_port }}
-      PROTO=http
-
-      errorExit() {
-          echo "*** $*" 1>&2
-          exit 1
-      }
-
-      curl --silent --max-time 2 --insecure ${PROTO}://localhost:${APISERVER_DEST_PORT}/ -o /dev/null || errorExit "Error GET ${PROTO}://localhost:${APISERVER_DEST_PORT}/"
-      if ip addr | grep -q ${APISERVER_VIP}; then
-          curl --silent --max-time 2 --insecure ${PROTO}://${APISERVER_VIP}:${APISERVER_DEST_PORT}/ -o /dev/null || errorExit "Error GET ${PROTO}://${APISERVER_VIP}:${APISERVER_DEST_PORT}/"
-      fi
-    owner: root
-    group: root
-    mode: '0755'
-  when: "'control_panel' in group_names"
-
-- name: Ensure check_apiserver.sh is executable
-  ansible.builtin.file:
-    path: /etc/keepalived/check_apiserver.sh
-    mode: '0755'
-  when: "'control_panel' in group_names"
-
+# ---------------------------
+# 7. Настройка haproxy (после получения ingress NodePort)
+# ---------------------------
 - name: Get ingress-nginx NodePort for HTTP
   ansible.builtin.command: |
     kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath="{.spec.ports[?(@.port==80)].nodePort}"
@@ -219,99 +223,12 @@
   when: ingress_nodeport_result.stdout is defined
 
 - name: Create haproxy.cfg on control_panel nodes
-  ansible.builtin.copy:
+  ansible.builtin.template:
+    src: templates/haproxy2.cfg.j2
     dest: /etc/haproxy/haproxy.cfg
-    content: |
-      # File: /etc/haproxy/haproxy.cfg
-      #---------------------------------------------------------------------
-      # Global settings
-      #---------------------------------------------------------------------
-      global
-          log /dev/log local0 info alert
-          log /dev/log local1 notice alert
-          daemon
-
-      #---------------------------------------------------------------------
-      # common defaults that all the 'listen' and 'backend' sections will
-      # use if not designated in their block
-      #---------------------------------------------------------------------
-      defaults
-          mode                    http
-          log                     global
-          option                  httplog
-          option                  dontlognull
-          option http-server-close
-          option forwardfor       except 127.0.0.0/8
-          option                  redispatch
-          retries                 1
-          timeout http-request    10s
-          timeout queue           20s
-          timeout connect         5s
-          timeout client          20s
-          timeout server          20s
-          timeout http-keep-alive 10s
-          timeout check           10s
-
-      #---------------------------------------------------------------------
-      # apiserver frontend which proxys to the control plane nodes
-      #---------------------------------------------------------------------
-      frontend apiserver
-          bind *:{{ api_port }}
-          mode tcp
-          option tcplog
-          default_backend apiserver
-
-      #---------------------------------------------------------------------
-      # round robin balancing for apiserver
-      #---------------------------------------------------------------------
-      backend apiserver
-          option httpchk GET /healthz
-          http-check expect status 200
-          mode tcp
-          option ssl-hello-chk
-          balance     roundrobin
-          {% for host in groups['control_panel'] %}
-              server {{ host }} {{ network_prefix }}{{ ip_base + loop.index }}:{{ control_panel_port }} check
-          {% endfor %}
-
-      #---------------------------------------------------------------------
-      # frontend for ingress controller (apps)
-      #---------------------------------------------------------------------
-      frontend ingress-http
-          bind *:80
-          mode tcp
-          option tcplog
-          default_backend ingress-http
-
-      backend ingress-http
-          mode tcp
-          balance roundrobin
-          {% set start_idx = (groups['control_panel'] | length) + 1 %}
-          {% for host in groups['workers'] %}
-              server {{ host }} {{ network_prefix }}{{ ip_base + start_idx + loop.index0 }}:{{ ingress_nodeport }} check
-          {% endfor %}
-
     owner: root
     group: root
     mode: '0644'
-  when: "'control_panel' in group_names"
-
-- name: Enable keepalived service
-  ansible.builtin.systemd:
-    name: keepalived
-    enabled: yes
-  when: "'control_panel' in group_names"
-
-- name: Start keepalived service
-  ansible.builtin.systemd:
-    name: keepalived
-    state: started
-  when: "'control_panel' in group_names"
-
-- name: Enable haproxy service
-  ansible.builtin.systemd:
-    name: haproxy
-    enabled: yes
   when: "'control_panel' in group_names"
 
 - name: Restart haproxy service

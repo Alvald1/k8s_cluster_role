@@ -28,6 +28,10 @@
     state: present
     reload: yes
 
+- name: Disable swap immediately
+  ansible.builtin.command: swapoff -a
+  changed_when: false
+
 - name: Ensure swap is disabled on boot
   ansible.builtin.replace:
     path: /etc/fstab

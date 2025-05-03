@@ -54,7 +54,7 @@ runc_binary: "https://github.com/opencontainers/runc/releases/download/{{ runc_v
 CNI_plugins: "https://github.com/containernetworking/plugins/releases/download/{{ CNI_version }}/cni-plugins-linux-amd64-{{ CNI_version }}.tgz"
 
 docker_gpg_key: "https://download.docker.com/linux/debian/gpg"
-docker_apt_repo: "deb [arch={{ ansible_architecture | default('amd64') }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_lsb.codename | default('bookworm') }} stable"
+docker_apt_repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable"
 
 kube_pwd: "/home/{{ ansible_user | default('user') }}/.kube"
 kube_flannel: "https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"
